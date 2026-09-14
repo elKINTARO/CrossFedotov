@@ -4,7 +4,8 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Unicode;
 
-Console.OutputEncoding = Encoding.UTF8;
+Console.OutputEncoding = Encoding.UTF8; 
+// для кирилиці
 
 var info = new
 {
@@ -13,7 +14,7 @@ var info = new
     OsDescription = RuntimeInformation.OSDescription,
     OsVersion = Environment.OSVersion.ToString(),
     ProcessArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
-    RuntimeIdentifier = RuntimeInformation.RuntimeIdentifier,
+    RuntimeIdentifier = RuntimeInformation.RuntimeIdentifier, // для RID 
     ClrVersion = Environment.Version.ToString(),
     Framework = RuntimeInformation.FrameworkDescription,
     BaseDirectory = AppContext.BaseDirectory,
@@ -25,7 +26,7 @@ if (args.Contains("--json"))
 {
     var options = new JsonSerializerOptions
     {
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) // вимикання екранування 
     };
     Console.WriteLine(JsonSerializer.Serialize(info, options));
     return;
