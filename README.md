@@ -11,38 +11,42 @@
 
 ## Запуск
 
-```
- dotnet build
- dotnet run --project src/Cli
- dotnet run --project src/Cli -- --json
+```bash
+dotnet build
+dotnet run --project src/Cli
+dotnet run --project src/Cli -- --json
 ```
 
 ## Середовище
 
 - .NET SDK 10.0.11
 - RID: osx-arm64
-- ОС:  macOS 26.6.2
+- ОС: macOS 26.6.2
 - Редактор: VS Code + C# Dev Kit
 
 ## Self-contained публікація
 
+```bash
+dotnet publish src/Cli -c Release -r win-x64 --self-contained true
+dotnet publish src/Cli -c Release -r linux-x64 --self-contained true
 ```
- dotnet publish src/Cli -c Release -r win-x64 --self-contained true
- dotnet publish src/Cli -c Release -r linux-x64 --self-contained true
-```
+
 ## Порівняння розмірів каталогів 
 
-```
- du -sh src/Cli/bin/Release/net10.0/linux-x64/publish
-  79M    src/Cli/bin/Release/net10.0/linux-x64/publish
- du -sh src/Cli/bin/Release/net10.0/win-x64/publish
-  77M    src/Cli/bin/Release/net10.0/win-x64/publish
- du -sh src/Cli/bin/Release/net10.0/osx-arm64/publish   
-  83M    src/Cli/bin/Release/net10.0/osx-arm64/publish  
+```bash
+du -sh src/Cli/bin/Release/net10.0/linux-x64/publish
+# 79M    src/Cli/bin/Release/net10.0/linux-x64/publish
+
+du -sh src/Cli/bin/Release/net10.0/win-x64/publish
+# 77M    src/Cli/bin/Release/net10.0/win-x64/publish
+
+du -sh src/Cli/bin/Release/net10.0/osx-arm64/publish   
+# 83M    src/Cli/bin/Release/net10.0/osx-arm64/publish  
 ```
 
 ## Структура solution
 
+```text
 CrossApp.slnx
 └── src/
     ├── Core/        # class library, без точки входу
@@ -51,6 +55,7 @@ CrossApp.slnx
     │   ├── Domain/    # сутності з поведінкою (тиждень 4)
     │   └── Storage/   # сховища (тиждень 5)
     └── Cli/         # консольний застосунок, ProjectReference → Core
+```
 
 Залежність одностороння: Cli → Core.
 
