@@ -1,34 +1,71 @@
 ﻿using System.Text;
-using System.Text.Encodings.Web;
-using System.Text.Json;
-using System.Text.Unicode;
-using Core;
+using Cli;
+using Core.Dto;
+using Core.Import;
 
 Console.OutputEncoding = Encoding.UTF8;
 
-EnvironmentReport report = EnvironmentInfo.Collect();
-
-if (args.Contains("--json"))
+// Режим lab01-02: інформація про середовище
+if (args is ["--env", ..])
 {
-    var options = new JsonSerializerOptions
-    {
-        WriteIndented = true,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-    };
-    Console.WriteLine(JsonSerializer.Serialize(report, options));
-    return;
+    EnvironmentView.Print(asJson: args.Contains("--json"));
+    return 0;
 }
 
-Console.WriteLine("CrossApp – інформація про середовище");
-Console.WriteLine("Студент: Федотов Кирило, група ФЕІ-36с");
-Console.WriteLine(new string('-', 52));
-Console.WriteLine($"ОС             : {report.OsDescription}");
-Console.WriteLine($"Runtime        : {report.FrameworkDescription}");
-Console.WriteLine($"Архітектура    : {report.ProcessArchitecture}");
-Console.WriteLine($"RID (визначено): {report.DetectedRid}");
-Console.WriteLine($"RID (від .NET) : {report.ReportedRid}");
-Console.WriteLine($"Каталог збірки : {report.BaseDirectory}");
-Console.WriteLine($"Поточний каталог: {report.CurrentDirectory}");
-Console.WriteLine($"TFM            : {report.BuildNote}");
-Console.WriteLine(new string('-', 52));
-Console.WriteLine("Предметна область: Замовлення (Customer, Product, Order, OrderLine)");
+// [дод 2] Товари і клієнти в одному файлі
+if (args is ["--mixed", var mixedPath])
+{
+    if (!File.Exists(mixedPath))
+    {
+        Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(mixedPath)}");
+        return 1;
+    }
+
+    MixedImportResult mixed = MixedCsvImporter.Load(mixedPath);
+    Console.WriteLine($"Товарів: {mixed.Products.Count}, клієнтів: {mixed.Customers.Count}");
+    foreach (ProductDto p in mixed.Products)
+        Console.WriteLine($"  {p.Id,-6} {p.Name,-26} {p.Price,10:F2} грн");
+    foreach (CustomerDto c in mixed.Customers)
+        Console.WriteLine($"  {c.Id,-6} {c.FullName,-20} {c.Email,-22} {c.Phone ?? "—"}");
+    foreach (string e in mixed.Errors)
+        Console.WriteLine($"  ! {e}");
+    return 0;
+}
+
+// Основний режим: імпорт товарів
+string path = args.Length > 0 ? args[0] : Path.Combine("data", "sample.csv");
+
+if (!File.Exists(path))
+{
+    Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(path)}");
+    return 1;
+}
+
+// [дод 1] Вибір імпортера за розширенням
+ImportResult<ProductDto>? result = Path.GetExtension(path).ToLowerInvariant() switch
+{
+    ".csv" => ProductCsvImporter.Load(path),
+    ".json" => ProductJsonImporter.Load(path),
+    _ => null
+};
+
+if (result is null)
+{
+    Console.WriteLine($"Непідтримуваний формат: {Path.GetExtension(path)}");
+    return 2;
+}
+
+Console.WriteLine($"Завантажено записів: {result.Items.Count}");
+foreach (ProductDto p in result.Items.Take(5))
+    Console.WriteLine($"  {p.Id,-6} {p.Name,-26} {p.Price,10:F2} грн");
+
+if (result.Errors.Count > 0)
+{
+    Console.WriteLine($"Пропущено рядків: {result.Errors.Count}");
+    foreach (string e in result.Errors)
+        Console.WriteLine($"  ! {e}");
+}
+
+// [дод 3] Статистика
+Console.WriteLine($"Усього {result.Total} | прийнято {result.Items.Count} | пропущено {result.Errors.Count} | помилок {result.ErrorRate:P0}");
+return 0;

@@ -11,11 +11,30 @@
 
 ## Запуск
 
-```bash
-dotnet build
-dotnet run --project src/Cli
-dotnet run --project src/Cli -- --json
 ```
+dotnet build
+dotnet run --project src/Cli                             # імпорт data/sample.csv
+dotnet run --project src/Cli -- data/sample.json         # імпорт JSON
+dotnet run --project src/Cli -- --mixed data/mixed.csv   # товари і клієнти в одному файлі
+dotnet run --project src/Cli -- --env                    # інформація про середовище
+dotnet run --project src/Cli -- --env --json             # те саме у JSON
+```
+
+Коди завершення: `0` успіх, `1` файл не знайдено, `2` непідтримуваний формат.
+
+## Формат даних
+
+`data/sample.csv` — товари (`ProductDto`):
+
+- кодування UTF-8
+- роздільник `;` (кома може бути в назвах)
+- заголовок `id;name;price` необов'язковий, рядки з `#` ігноруються
+- ціна — додатне число з крапкою (`649.50`), розбір через `CultureInfo.InvariantCulture`
+
+Рядки 12–14 навмисно пошкоджені (тестові дані): бракує колонки, кома в ціні, порожня назва.
+
+`data/mixed.csv` — записи різних типів за префіксом:
+`P;id;name;price` — товар, `C;id;fullName;email[;phone]` — клієнт.
 
 ## Середовище
 
@@ -51,10 +70,15 @@ CrossApp.slnx
 └── src/
     ├── Core/        # class library, без точки входу
     │   ├── EnvironmentInfo.cs
-    │   ├── Dto/       # record-типи (тиждень 3)
+    │   ├── Dto/       # ProductDto, CustomerDto, ImportResult<T>, MixedImportResult
+    │   ├── Import/    # ProductCsvImporter, ProductJsonImporter, MixedCsvImporter
     │   ├── Domain/    # сутності з поведінкою (тиждень 4)
     │   └── Storage/   # сховища (тиждень 5)
     └── Cli/         # консольний застосунок, ProjectReference → Core
+    ├── data/
+    ├── sample.csv
+    ├── sample.json
+    └── mixed.csv
 ```
 
 Залежність одностороння: Cli → Core.

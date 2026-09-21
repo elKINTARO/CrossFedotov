@@ -1,0 +1,8 @@
+# P;id;name;price  |  C;id;fullName;email[;phone]
+P;P-201;Принтер лазерний;6499.00
+P;P-202;Картридж;1299.50
+C;C-001;Іваненко Петро;petro@example.com;+380671234567
+C;C-002;Коваль Олена;olena@example.com
+C;C-003;Без пошти;no-email
+X;щось;незрозуміле
+P;P-203;Сканер;дорого

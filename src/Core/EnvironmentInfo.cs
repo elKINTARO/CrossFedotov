@@ -21,6 +21,7 @@ public static class EnvironmentInfo
 #endif
 
     public static EnvironmentReport Collect() => new(
+        // Щоб відокремити дані від представлення. Друк — відповідальність споживача, і споживачі різні
         RuntimeInformation.OSDescription,
         RuntimeInformation.FrameworkDescription,
         RuntimeInformation.ProcessArchitecture.ToString(),

@@ -480,3 +480,7 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# lab02 publish artifacts
+out/
+trim-warnings.txt
