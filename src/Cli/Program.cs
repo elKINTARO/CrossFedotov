@@ -12,6 +12,21 @@ if (args is ["--env", ..])
     return 0;
 }
 
+// Демонстрація доменної моделі (lab04)
+if (args is ["--domain", ..])
+{
+    string catalogPath = args.Length > 1 ? args[1] : Path.Combine("data", "sample.csv");
+
+    if (!File.Exists(catalogPath))
+    {
+        Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(catalogPath)}");
+        return 1;
+    }
+
+    DomainDemo.Run(catalogPath);
+    return 0;
+}
+
 // [дод 2] Товари і клієнти в одному файлі
 if (args is ["--mixed", var mixedPath])
 {
@@ -56,7 +71,7 @@ if (result is null)
 }
 
 Console.WriteLine($"Завантажено записів: {result.Items.Count}");
-foreach (ProductDto p in result.Items.Take(5))
+foreach (ProductDto p in result.Items.Take(10))
     Console.WriteLine($"  {p.Id,-6} {p.Name,-26} {p.Price,10:F2} грн");
 
 if (result.Errors.Count > 0)

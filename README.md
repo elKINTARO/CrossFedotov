@@ -18,6 +18,7 @@ dotnet run --project src/Cli -- data/sample.json         # імпорт JSON
 dotnet run --project src/Cli -- --mixed data/mixed.csv   # товари і клієнти в одному файлі
 dotnet run --project src/Cli -- --env                    # інформація про середовище
 dotnet run --project src/Cli -- --env --json             # те саме у JSON
+dotnet run --project src/Cli -- --domain                 # доменна модель: інваріанти
 ```
 
 Коди завершення: `0` успіх, `1` файл не знайдено, `2` непідтримуваний формат.
