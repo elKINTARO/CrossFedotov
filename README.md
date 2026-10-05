@@ -98,3 +98,35 @@ CrossApp.slnx
 
 **Framework-dependent** — лише код застосунку і його залежності.
 Каталог маленький, але на цільовій машині має бути .NET 10.
+
+## Доменна модель (lab04)
+
+`Order` — агрегат: володіє своїми `OrderLine` і є єдиною точкою їх зміни.
+`Product` — товар каталогу. Створення лише через фабричні методи `Create`,
+конструктори приватні, стан змінюється тільки методами з бізнес-іменами.
+
+### Інваріанти
+
+| Правило | Тип винятку | Де перевіряється |
+|---|---|---|
+| Номер замовлення не порожній | `ArgumentException` | `Order.Create` |
+| Замовлення має клієнта | `ArgumentException` | `Order.Create` |
+| Id і назва товару в рядку не порожні | `ArgumentException` | `OrderLine.Create` |
+| Кількість у рядку > 0 | `ArgumentOutOfRangeException` | `OrderLine.Create` |
+| Ціна в рядку ≥ 0 | `ArgumentOutOfRangeException` | `OrderLine.Create` |
+| Ціна товару каталогу > 0 | `ArgumentOutOfRangeException` | `Product.Create`, `Product.ChangePrice` |
+| Рядки можна додавати лише в чернетку | `InvalidOperationException` | `Order.AddLine` |
+| Порожнє замовлення не підтверджується | `InvalidOperationException` | `Order.Confirm` |
+| Допустимі переходи статусів (Draft→Confirmed, Draft→Cancelled, Confirmed→Cancelled) | `InvalidOperationException` | `Order.TransitionTo` |
+| Клієнт має не більше 3 чернеток | `InvalidOperationException` | `CustomerOrderPolicy` |
+
+`Argument*` — некоректний вхідний аргумент; `InvalidOperationException` — аргументи
+коректні, але операція неможлива в поточному стані. На тижні 10 Api перетворить їх
+на 400 і 409 відповідно.
+
+### DTO і сутність
+
+`ProductDto` / `OrderDto` переносять дані (формат файлу і сховища тижня 5),
+сутності захищають правила. Зв'язок — `ToDto()` і `FromDto()`; `FromDto`
+проходить ті самі перевірки, що й `Create`, тому пошкоджений файл не створить
+некоректний об'єкт.
