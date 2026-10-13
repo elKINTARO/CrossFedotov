@@ -13,12 +13,16 @@
 
 ```
 dotnet build
-dotnet run --project src/Cli                             # імпорт data/sample.csv
-dotnet run --project src/Cli -- data/sample.json         # імпорт JSON
-dotnet run --project src/Cli -- --mixed data/mixed.csv   # товари і клієнти в одному файлі
-dotnet run --project src/Cli -- --env                    # інформація про середовище
-dotnet run --project src/Cli -- --env --json             # те саме у JSON
-dotnet run --project src/Cli -- --domain                 # доменна модель: інваріанти
+dotnet run --project src/Cli                                     # lab05: сховище в пам'яті
+dotnet run --project src/Cli -- --file                           # lab05: сховище у файлі
+dotnet run --project src/Cli -- --cache                          # lab05: пам'ять + декоратор кешу
+dotnet run --project src/Cli -- --file --cache                   # lab05: файл + декоратор кешу
+dotnet run --project src/Cli -- --domain                         # lab04: доменна модель, інваріанти
+dotnet run --project src/Cli -- --import                         # lab03: імпорт data/sample.csv
+dotnet run --project src/Cli -- --import data/sample.json        # lab03: імпорт JSON
+dotnet run --project src/Cli -- --mixed data/mixed.csv           # lab03: товари і клієнти в одному файлі
+dotnet run --project src/Cli -- --env                            # lab02: інформація про середовище
+dotnet run --project src/Cli -- --env --json                     # lab02: те саме у JSON
 ```
 
 Коди завершення: `0` успіх, `1` файл не знайдено, `2` непідтримуваний формат.
@@ -74,6 +78,10 @@ CrossApp.slnx
     │   ├── Dto/       # ProductDto, CustomerDto, ImportResult<T>, MixedImportResult
     │   ├── Import/    # ProductCsvImporter, ProductJsonImporter, MixedCsvImporter
     │   ├── Domain/    # сутності з поведінкою (тиждень 4)
+    │   ├── Abstractions/  # IOrderStore — контракт сховища
+    │   ├── Services/      # OrderService
+    │   ├── Storage/       # InMemoryOrderStore, FileOrderStore, CachingOrderStore
+    │   └── SampleData.cs
     │   └── Storage/   # сховища (тиждень 5)
     └── Cli/         # консольний застосунок, ProjectReference → Core
     ├── data/
@@ -130,3 +138,42 @@ CrossApp.slnx
 сутності захищають правила. Зв'язок — `ToDto()` і `FromDto()`; `FromDto`
 проходить ті самі перевірки, що й `Create`, тому пошкоджений файл не створить
 некоректний об'єкт.
+
+## Сервісний шар і сховища (lab05)
+
+| Роль | Тип |
+|---|---|
+| Контракт сховища | `Core.Abstractions.IOrderStore` |
+| Реалізація в пам'яті | `Core.Storage.InMemoryOrderStore` — `Dictionary`, дані зникають після виходу |
+| Файлова реалізація | `Core.Storage.FileOrderStore` — кеш у пам'яті, запис JSON після кожної зміни |
+| Декоратор | `Core.Storage.CachingOrderStore` — кешує читання будь-якого `IOrderStore` |
+| Сервіс | `Core.Services.OrderService` — `CreateOrder`, `AddLine`, `Confirm`, `Cancel`, `All`, `Find`, `Where` |
+| Composition root | `src/Cli/Program.cs` + `src/Cli/StoreFactory.cs` |
+
+Схема залежностей:
+
+```
+Cli (Program.cs, StoreFactory) → OrderService → IOrderStore ← InMemoryOrderStore | FileOrderStore | CachingOrderStore(IOrderStore)
+```
+
+Файл даних у режимі `--file`: `<каталог збірки>/data/orders.json`
+(для `dotnet run` це `src/Cli/bin/Debug/net10.0/data/orders.json`).
+Формат — масив `OrderDto` з вкладеними `OrderLineDto`; агрегат зберігається як одне ціле.
+Якщо формат змінився і запуск падає з `JsonException`, файл треба видалити.
+
+DI-контейнер не використовується: залежності передаються через конструктор вручну.
+
+### Фабрика проти «усе в Program.cs»
+
+Без фабрики вибір реалізації виглядав би так, прямо в `Program.cs`:
+
+```csharp
+IOrderStore store = args.Contains("--file")
+    ? new FileOrderStore(dataPath)
+    : new InMemoryOrderStore(SampleData.Orders());
+if (args.Contains("--cache")) store = new CachingOrderStore(store);
+```
+
+`StoreFactory` містить той самий код, але `Program.cs` лишається коротким, а правила
+вибору сховища можна змінювати й тестувати окремо. Обидва варіанти — composition root:
+конкретні класи сховищ живуть лише в проєкті Cli, а `OrderService` про них не знає.
