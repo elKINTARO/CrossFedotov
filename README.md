@@ -23,6 +23,8 @@ dotnet run --project src/Cli -- --import data/sample.json        # lab03: імп
 dotnet run --project src/Cli -- --mixed data/mixed.csv           # lab03: товари і клієнти в одному файлі
 dotnet run --project src/Cli -- --env                            # lab02: інформація про середовище
 dotnet run --project src/Cli -- --env --json                     # lab02: те саме у JSON
+dotnet run --project src/Cli -- --events                         # lab06: події, два підписники, відписка
+dotnet run --project src/Cli -- --sink                           # lab06: INotificationSink через конструктор
 ```
 
 Коди завершення: `0` успіх, `1` файл не знайдено, `2` непідтримуваний формат.
@@ -78,6 +80,7 @@ CrossApp.slnx
     │   ├── Dto/       # ProductDto, CustomerDto, ImportResult<T>, MixedImportResult
     │   ├── Import/    # ProductCsvImporter, ProductJsonImporter, MixedCsvImporter
     │   ├── Domain/    # сутності з поведінкою (тиждень 4)
+    │   ├── Events/        # OrderChangeKind, OrderChangedEventArgs
     │   ├── Abstractions/  # IOrderStore — контракт сховища
     │   ├── Services/      # OrderService
     │   ├── Storage/       # InMemoryOrderStore, FileOrderStore, CachingOrderStore
@@ -87,7 +90,8 @@ CrossApp.slnx
     ├── data/
     ├── sample.csv
     ├── sample.json
-    └── mixed.csv
+    ├── mixed.csv
+    └── Notifications/ # OrderLogFormat, ConsoleSink, FileSink
 ```
 
 Залежність одностороння: Cli → Core.
@@ -177,3 +181,44 @@ if (args.Contains("--cache")) store = new CachingOrderStore(store);
 `StoreFactory` містить той самий код, але `Program.cs` лишається коротким, а правила
 вибору сховища можна змінювати й тестувати окремо. Обидва варіанти — composition root:
 конкретні класи сховищ живуть лише в проєкті Cli, а `OrderService` про них не знає.
+
+## Доменні події (lab06)
+
+`OrderService` оголошує `event EventHandler<OrderChangedEventArgs>? Changed`
+і піднімає її в одному методі `OnChanged` — лише після успішної зміни і збереження.
+
+| Подія | Коли | Delta |
+|---|---|---|
+| `OrderCreated` | `CreateOrder` | 0 |
+| `LineAdded` | `AddLine` | сума доданого рядка |
+| `OrderConfirmed` | `Confirm` | 0 |
+| `OrderCancelled` | `Cancel` | 0 |
+
+Дані події: `OrderId`, `CustomerId`, `Kind`, `LinesCount`, `Total` (після зміни), `Delta`, `At`.
+
+Підписники в Cli (`EventsDemo`): лямбда-лічильник із замиканням і локальна функція,
+що пише в консоль та в `logs/app.log`. Після `-=` операції виконуються без запису в журнал.
+
+Журнал: `<каталог збірки>/logs/app.log` (для `dotnet run` — `src/Cli/bin/Debug/net10.0/logs/app.log`).
+
+Core не звертається до консолі і не пише журнал. Перевірка: `grep -rn "Console" src/Core` — порожньо.
+
+Майбутні підписники: тиждень 10 — логер Api, тиждень 12 — компонент Blazor, що оновлює таблицю.
+
+### Делегати
+
+- `FindAll(Func<Order, bool>)` — пошук, критерій задає викликач, потрібне значення у відповідь.
+- `ProductCsvImporter.Load(path, Action<string>? onSkipped)` — звіт про пропущені рядки в момент читання.
+
+### Подія проти INotificationSink (додаткове 1)
+
+| | `event Changed` | `INotificationSink` через конструктор |
+|---|---|---|
+| Хто вирішує про одержувачів | підписник сам, у будь-який момент | composition root, один раз |
+| Відписка під час роботи | `-=` | неможлива |
+| Залежність сервісу | ні від чого | від інтерфейсу в конструкторі |
+| Що видно з сигнатури | нічого | конструктор явно показує одержувачів |
+| Тест тижня 8 | підписатись лямбдою | передати фейковий sink |
+
+Подія зручніша, коли підписники з'являються і зникають (компонент Blazor).
+Sink — коли набір одержувачів фіксований і має бути явно видно в конструкторі.

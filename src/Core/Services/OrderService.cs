@@ -1,31 +1,54 @@
 using Core.Abstractions;
 using Core.Domain;
+using Core.Events;
 
 namespace Core.Services;
 
-// Бізнес-операції над замовленнями. Сервіс не знає слів «File» і «Dictionary»:
-// він працює лише з контрактом IOrderStore, який отримує через конструктор.
-public sealed class OrderService(IOrderStore store, TimeProvider? clock = null)
+// Бізнес-операції над замовленнями. Сервіс працює лише з контрактом IOrderStore
+// і повідомляє про зміни подією Changed. Як обробити повідомлення — вирішує зовнішній код.
+public sealed class OrderService(
+    IOrderStore store,
+    TimeProvider? clock = null,
+    IReadOnlyList<INotificationSink>? sinks = null)
 {
     private readonly IOrderStore _store = store ?? throw new ArgumentNullException(nameof(store));
     private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+    private readonly IReadOnlyList<INotificationSink> _sinks = sinks ?? [];
+
+    // Подія: ззовні можна лише підписатися (+=) або відписатися (-=).
+    // Викликати її може тільки OrderService.
+    public event EventHandler<OrderChangedEventArgs>? Changed;
+
+    // Єдина точка підняття. Викликається лише ПІСЛЯ успішної зміни і збереження.
+    private void OnChanged(Order order, OrderChangeKind kind, decimal delta = 0m)
+    {
+        var args = new OrderChangedEventArgs(
+            order.Id, order.CustomerId, kind, order.Lines.Count, order.Total, delta, _clock.GetLocalNow());
+
+        Changed?.Invoke(this, args);
+
+        foreach (INotificationSink sink in _sinks)   // [дод 1]
+            sink.Notify(args);
+    }
 
     public Order CreateOrder(string customerId)
     {
-        // Правило двох сутностей з лабораторної 4: сервіс має доступ до сховища,
-        // тому саме тут можна порахувати інші замовлення клієнта.
+        // Правило двох сутностей з лабораторної 4: лише сервіс бачить усі замовлення клієнта.
         CustomerOrderPolicy.EnsureCanOpenNewOrder(customerId, _store.List());
 
         Order order = Order.Create($"ORD-{Guid.NewGuid().ToString("N")[..8]}", customerId, _clock.GetUtcNow());
-        _store.Add(order); // інваріанти вже перевірив Order.Create, сховище перевіряє лише унікальність id
+        _store.Add(order);
+        OnChanged(order, OrderChangeKind.OrderCreated); // після зміни, не до
         return order;
     }
 
     public void AddLine(string orderId, Product product, int quantity)
     {
         Order order = Require(orderId);
-        order.AddLine(product, quantity); // метод сутності з лабораторної 4
+        decimal before = order.Total;
+        order.AddLine(product, quantity); // кине виняток на інваріанті → до OnChanged не дійде
         _store.Update(order);
+        OnChanged(order, OrderChangeKind.LineAdded, order.Total - before);
     }
 
     public void Confirm(string orderId)
@@ -33,6 +56,7 @@ public sealed class OrderService(IOrderStore store, TimeProvider? clock = null)
         Order order = Require(orderId);
         order.Confirm();
         _store.Update(order);
+        OnChanged(order, OrderChangeKind.OrderConfirmed);
     }
 
     public void Cancel(string orderId)
@@ -40,15 +64,15 @@ public sealed class OrderService(IOrderStore store, TimeProvider? clock = null)
         Order order = Require(orderId);
         order.Cancel();
         _store.Update(order);
+        OnChanged(order, OrderChangeKind.OrderCancelled);
     }
 
     public IReadOnlyList<Order> All() => _store.List();
 
     public Order? Find(string id) => _store.GetById(id);
 
-    // [дод 2] Довільний фільтр — підготовка до подій і LINQ-звітів тижнів 6-7.
-    // Метод не додано в IOrderStore: контракт сховища не розширюємо «про запас».
-    public IReadOnlyList<Order> Where(Func<Order, bool> predicate)
+    // Func, а не подія: тут потрібне значення у відповідь, критерій задає викликач.
+    public IReadOnlyList<Order> FindAll(Func<Order, bool> predicate)
     {
         ArgumentNullException.ThrowIfNull(predicate);
         return _store.List().Where(predicate).ToList();

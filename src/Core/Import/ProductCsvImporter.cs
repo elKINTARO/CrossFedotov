@@ -8,7 +8,9 @@ public static class ProductCsvImporter
     // Крапка з комою: не конфліктує з комою в назвах товарів
     private const char Separator = ';';
 
-    public static ImportResult<ProductDto> Load(string path)
+    // [дод 2] onSkipped — необов'язковий делегат: імпортер повідомляє про кожен пропущений рядок
+    // у момент читання. Що з цим робити, вирішує викликач.
+    public static ImportResult<ProductDto> Load(string path, Action<string>? onSkipped = null)
     {
         var items = new List<ProductDto>();
         var errors = new List<string>();
@@ -30,7 +32,9 @@ public static class ProductCsvImporter
                     items.Add(ok.Value);
                     break;
                 case ParseFailed failed:
-                    errors.Add($"рядок {number}: {failed.Reason}");
+                    string message = $"рядок {number}: {failed.Reason}";
+                    errors.Add(message);
+                    onSkipped?.Invoke(message);
                     break;
             }
         }

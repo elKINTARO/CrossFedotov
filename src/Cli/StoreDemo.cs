@@ -32,8 +32,8 @@ internal static class StoreDemo
             Console.WriteLine($"  {o.Id,-12} {o.CustomerId,-6} {o.Status,-10} {o.Lines.Count,2} рядк. {o.Total,12:F2}");
 
         Console.WriteLine();
-        Console.WriteLine("=== [дод 2] Пошук через Func<Order, bool> ===");
-        IReadOnlyList<Order> big = service.Where(o => o.Status == OrderStatus.Confirmed && o.Total > 10_000m);
+        Console.WriteLine("=== [дод 2 lab05] Пошук через Func<Order, bool> ===");
+        IReadOnlyList<Order> big = service.FindAll(o => o.Status == OrderStatus.Confirmed && o.Total > 10_000m);
         Console.WriteLine($"  Підтверджених на суму > 10 000: {big.Count}");
         foreach (Order o in big)
             Console.WriteLine($"    {o.Id} {o.Total:F2}");

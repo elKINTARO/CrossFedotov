@@ -484,3 +484,6 @@ $RECYCLE.BIN/
 # lab02 publish artifacts
 out/
 trim-warnings.txt
+
+# lab06 logs
+logs/

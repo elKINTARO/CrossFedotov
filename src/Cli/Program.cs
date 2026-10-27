@@ -4,6 +4,7 @@ using Core.Abstractions;
 using Core.Dto;
 using Core.Import;
 using Core.Services;
+using Cli.Notifications;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -58,10 +59,14 @@ if (args is ["--import", ..])
         return 1;
     }
 
+    // lab06 [дод 2]: Action<string> — імпортер повідомляє про пропущені рядки в момент читання.
+    Action<string> reportSkipped = message => Console.WriteLine($"  ! пропущено {message}");
+
+    Console.WriteLine($"Читання {path}...");
     ImportResult<ProductDto>? result = Path.GetExtension(path).ToLowerInvariant() switch
     {
-        ".csv" => ProductCsvImporter.Load(path),
-        ".json" => ProductJsonImporter.Load(path),
+        ".csv" => ProductCsvImporter.Load(path, reportSkipped),
+        ".json" => ProductJsonImporter.Load(path, reportSkipped),
         _ => null
     };
 
@@ -74,28 +79,35 @@ if (args is ["--import", ..])
     Console.WriteLine($"Завантажено записів: {result.Items.Count}");
     foreach (ProductDto p in result.Items.Take(10))
         Console.WriteLine($"  {p.Id,-6} {p.Name,-26} {p.Price,10:F2} грн");
-    if (result.Errors.Count > 0)
-    {
-        Console.WriteLine($"Пропущено рядків: {result.Errors.Count}");
-        foreach (string e in result.Errors)
-            Console.WriteLine($"  ! {e}");
-    }
 
+    // Помилки вже надрукував reportSkipped, тут лише підсумок.
     Console.WriteLine($"Усього {result.Total} | прийнято {result.Items.Count} | пропущено {result.Errors.Count} | помилок {result.ErrorRate:P0}");
     return 0;
 }
 
-// lab05: COMPOSITION ROOT
+// ===== COMPOSITION ROOT (lab05-06) =====
 // Єдине місце, де створюються конкретні класи і зшиваються залежності.
-// Прапорці: --file (сховище у файлі), --cache (обгорнути декоратором).
+// Сховище: --file, --cache. Сценарій: --events (lab06), --sink (lab06, дод 1), без прапорця — lab05.
 string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "orders.json");
+string logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
 
 IOrderStore store = StoreFactory.Create(args, dataPath);
-var service = new OrderService(store);
 
 try
 {
-    StoreDemo.Run(service, store);
+    if (args.Contains("--events"))
+    {
+        EventsDemo.Run(new OrderService(store), logPath);
+    }
+    else if (args.Contains("--sink"))
+    {
+        INotificationSink[] sinks = [new ConsoleSink(), new FileSink(logPath)];
+        SinkDemo.Run(new OrderService(store, sinks: sinks));
+    }
+    else
+    {
+        StoreDemo.Run(new OrderService(store), store);
+    }
 }
 catch (System.Text.Json.JsonException ex)
 {

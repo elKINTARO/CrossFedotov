@@ -7,7 +7,7 @@ public static class ProductJsonImporter
 {
     private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
 
-    public static ImportResult<ProductDto> Load(string path)
+    public static ImportResult<ProductDto> Load(string path, Action<string>? onSkipped = null)
     {
         try
         {
@@ -17,7 +17,9 @@ public static class ProductJsonImporter
         }
         catch (JsonException ex)
         {
-            return new ImportResult<ProductDto>([], [$"рядок {ex.LineNumber + 1}: некоректний JSON"]);
+            string message = $"рядок {ex.LineNumber + 1}: некоректний JSON";
+            onSkipped?.Invoke(message);
+            return new ImportResult<ProductDto>([], [message]);
         }
     }
 }
