@@ -25,6 +25,16 @@ dotnet run --project src/Cli -- --env                            # lab02: інф
 dotnet run --project src/Cli -- --env --json                     # lab02: те саме у JSON
 dotnet run --project src/Cli -- --events                         # lab06: події, два підписники, відписка
 dotnet run --project src/Cli -- --sink                           # lab06: INotificationSink через конструктор
+dotnet run --project src/Cli -- report-top                       # lab07: топ-5 клієнтів за сумою
+dotnet run --project src/Cli -- report-expensive                 # lab07: замовлення дорожчі за 10 000
+dotnet run --project src/Cli -- report-groups                    # lab07: групи за статусом і місяцем
+dotnet run --project src/Cli -- report-sum                       # lab07: середній чек, максимальне
+dotnet run --project src/Cli -- report-products                  # lab07: топ-5 товарів (SelectMany)
+dotnet run --project src/Cli -- report-customers                 # lab07: GroupJoin клієнтів і замовлень
+dotnet run --project src/Cli -- report-groups-query              # lab07: синтаксис запитів
+dotnet run --project src/Cli -- demo-deferred                    # lab07: відкладене виконання
+dotnet run --project src/Cli -- bench                            # lab07: Stopwatch, 100 000 записів
+dotnet run --project src/Cli -- report-sum --empty               # lab07: порожнє джерело
 ```
 
 Коди завершення: `0` успіх, `1` файл не знайдено, `2` непідтримуваний формат.
@@ -80,6 +90,7 @@ CrossApp.slnx
     │   ├── Dto/       # ProductDto, CustomerDto, ImportResult<T>, MixedImportResult
     │   ├── Import/    # ProductCsvImporter, ProductJsonImporter, MixedCsvImporter
     │   ├── Domain/    # сутності з поведінкою (тиждень 4)
+    │    ├── Reports/       # ReportDtos, ReportService,      EnumerableExtensions, ReportVariants
     │   ├── Events/        # OrderChangeKind, OrderChangedEventArgs
     │   ├── Abstractions/  # IOrderStore — контракт сховища
     │   ├── Services/      # OrderService
@@ -222,3 +233,66 @@ Core не звертається до консолі і не пише журна
 
 Подія зручніша, коли підписники з'являються і зникають (компонент Blazor).
 Sink — коли набір одержувачів фіксований і має бути явно видно в конструкторі.
+
+## Звіти LINQ (lab07)
+
+Усі запити — у `Core/Reports/ReportService.cs`. Приймають `IEnumerable<Order>`, повертають
+`IReadOnlyList<DTO>`. У `Program.cs` лише виклики і вивід.
+
+| Метод | Питання | Оператори |
+|---|---|---|
+| `TopCustomers` | хто з клієнтів приносить найбільше? | Where, GroupBy, Sum, TopBy |
+| `ExpensiveOrders` | які замовлення дорожчі за N? | Where, OrderByDescending, ThenBy, Select |
+| `ByStatus` | скільки замовлень і грошей у кожному статусі? | GroupBy, Count, Sum |
+| `ByMonth` | як розподіляються замовлення за місяцями? | GroupBy, Count, Sum |
+| `Totals` | середній чек і максимальне замовлення | Sum, Average, Max |
+| `TopProducts` | які товари продаються найбільше? | SelectMany, GroupBy, TopBy |
+| `CustomersWithOrders` | скільки замовлень у кожного клієнта довідника? | GroupJoin |
+
+Рахуються тільки підтверджені замовлення: скасоване не є виручкою.
+Топ-N має другий ключ (`ThenBy` за id), тож порядок однаковий між запусками.
+Порожнє джерело: `Totals` перевіряє `Count == 0` до `Average`/`Max`.
+
+### Відкладене виконання
+
+`Where`, `Select`, `OrderBy`, `GroupBy` лише описують запит. Він виконується тоді,
+коли результат перебирають: `foreach`, `Count()`, `ToList()`, `Sum()`, `First()`.
+У `demo-deferred` запит `source.Where(o => o.Total > 10_000m)` двічі дає різні числа (5, потім 6),
+бо кожен `Count()` проходить джерело заново і бачить доданий елемент.
+Після `ToList()` результат зафіксовано: `source.Clear()` вже не впливає на знімок (6).
+Лічильник у предикаті показує 0 викликів після оголошення, 20 після першого `Count()`,
+40 після другого — тому результат, що використовується двічі, треба матеріалізувати.
+Звіти повертають `IReadOnlyList` саме з цієї причини.
+
+### Синтаксис запитів проти методного (додаткове 3)
+
+```csharp
+// методний
+source.GroupBy(o => o.Status)
+      .Select(g => new GroupSummary(g.Key.ToString(), g.Count(), g.Sum(o => o.Total)))
+      .OrderByDescending(s => s.TotalAmount)
+
+// синтаксис запитів
+from order in source
+group order by order.Status into g
+let total = g.Sum(o => o.Total)
+orderby total descending
+select new GroupSummary(g.Key.ToString(), g.Count(), total)
+```
+
+Результати однакові (`report-groups-query` перевіряє `SequenceEqual`).
+Синтаксис запитів читабельніший, коли в центрі групування: `let` дає ім'я сумі,
+і вона не обчислюється двічі. Для ланцюжків `Where` → `ThenBy` → `Take` методний
+синтаксис коротший і читається зліва направо, тому основні звіти записані ним.
+
+### Замір на 100 000 записів (додаткове 4)
+
+| Варіант | Час, мс |
+|---|---|
+| A. без ToList посередині | _впиши_ |
+| B. з ToList посередині | _впиши_ |
+| C. відкладений запит двічі | _впиши_ |
+| D. матеріалізовано один раз | _впиши_ |
+
+B повільніший за A через проміжний список. C повільніший за D приблизно вдвічі:
+відкладений запит проходить 100 000 записів двічі.

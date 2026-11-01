@@ -1,4 +1,5 @@
 using Core.Domain;
+using Core.Dto;
 
 namespace Core;
 
@@ -44,7 +45,48 @@ public static class SampleData
             Make("ORD-S014", "C-001", 18, OrderStatus.Confirmed, (p[8], 2)),
             Make("ORD-S015", "C-003", 20, OrderStatus.Draft,     (p[5], 1)),
             Make("ORD-S016", "C-002", 22, OrderStatus.Confirmed, (p[0], 1), (p[3], 1), (p[4], 1)),
+            Make("ORD-S017", "C-005", 31, OrderStatus.Confirmed, (p[0], 1), (p[4], 1)),
+            Make("ORD-S018", "C-006", 33, OrderStatus.Confirmed, (p[3], 1)),
+            Make("ORD-S019", "C-001", 35, OrderStatus.Cancelled, (p[2], 2)),
+            Make("ORD-S020", "C-003", 38, OrderStatus.Confirmed, (p[1], 2), (p[9], 3)),
         ];
+    }
+
+        // [дод 1] Довідник клієнтів для GroupJoin. C-007 навмисно без замовлень.
+    public static IReadOnlyList<CustomerDto> Customers() =>
+    [
+        new("C-001", "Іваненко Петро", "petro@example.com", "+380671234567"),
+        new("C-002", "Коваль Олена", "olena@example.com"),
+        new("C-003", "Шевчук Андрій", "andrii@example.com"),
+        new("C-004", "Бондар Ірина", "iryna@example.com", "+380501112233"),
+        new("C-005", "Мельник Тарас", "taras@example.com"),
+        new("C-006", "Ткаченко Марія", "maria@example.com"),
+        new("C-007", "Новий Клієнт", "new@example.com"),
+    ];
+
+    // [дод 4] Генератор великого набору для заміру. Фіксований seed: щоразу ті самі дані.
+    // Створення через фабрики, тож навіть згенеровані дані проходять інваріанти.
+    public static IReadOnlyList<Order> Generate(int count, int seed = 42)
+    {
+        var random = new Random(seed);
+        IReadOnlyList<Product> products = Products();
+        var orders = new List<Order>(count);
+
+        for (int i = 0; i < count; i++)
+        {
+            Order order = Order.Create($"GEN-{i:D6}", $"C-{random.Next(1, 501):D3}", BaseDate.AddMinutes(i));
+
+            int lines = random.Next(1, 4);
+            for (int l = 0; l < lines; l++)
+                order.AddLine(products[random.Next(products.Count)], random.Next(1, 6));
+
+            if (random.Next(10) < 8)
+                order.Confirm();
+
+            orders.Add(order);
+        }
+
+        return orders;
     }
 
     private static Order Make(string id, string customerId, int day, OrderStatus status,

@@ -5,6 +5,9 @@ using Core.Dto;
 using Core.Import;
 using Core.Services;
 using Cli.Notifications;
+using Core;
+using Core.Domain;
+using Core.Reports;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -85,16 +88,22 @@ if (args is ["--import", ..])
     return 0;
 }
 
-// ===== COMPOSITION ROOT (lab05-06) =====
+// ===== COMPOSITION ROOT (lab05-07) =====
 // Єдине місце, де створюються конкретні класи і зшиваються залежності.
-// Сховище: --file, --cache. Сценарій: --events (lab06), --sink (lab06, дод 1), без прапорця — lab05.
+// Сховище: --file, --cache. Сценарій: --events, --sink (lab06), report-* (lab07), без аргументів — lab05.
 string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "orders.json");
 string logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
 
 IOrderStore store = StoreFactory.Create(args, dataPath);
 
+// lab07: перший аргумент без "--" — назва звіту. Прапорці (--file тощо) назвою не вважаються.
+string? command = args.FirstOrDefault(a => !a.StartsWith("--"));
+
 try
 {
+    if (command is not null)
+        return RunReport(command, new OrderService(store), empty: args.Contains("--empty"));
+
     if (args.Contains("--events"))
     {
         EventsDemo.Run(new OrderService(store), logPath);
@@ -117,3 +126,64 @@ catch (System.Text.Json.JsonException ex)
 }
 
 return 0;
+
+// lab07: підкоманди звітів. Тут лише виклики ReportService і вивід — жодного відбору даних.
+static int RunReport(string command, OrderService service, bool empty)
+{
+    // --empty: перевірка, що звіти не падають на порожньому джерелі.
+    IReadOnlyList<Order> items = empty ? [] : service.All();
+    Console.WriteLine($"Джерело: {items.Count} замовлень");
+    Console.WriteLine();
+
+    switch (command)
+    {
+        case "report-top":
+            ReportPrinter.Print(ReportService.TopCustomers(items, 5));
+            return 0;
+
+        case "report-expensive":
+            ReportPrinter.Print(ReportService.ExpensiveOrders(items, 10_000m));
+            return 0;
+
+        case "report-groups":
+            ReportPrinter.Print("За статусом", ReportService.ByStatus(items));
+            Console.WriteLine();
+            ReportPrinter.Print("За місяцем", ReportService.ByMonth(items));
+            return 0;
+
+        case "report-sum":
+            ReportPrinter.Print(ReportService.Totals(items));
+            return 0;
+
+        case "report-products":
+            ReportPrinter.Print(ReportService.TopProducts(items, 5));
+            return 0;
+
+        case "report-customers":                                   // [дод 1]
+            ReportPrinter.Print(ReportService.CustomersWithOrders(SampleData.Customers(), items));
+            return 0;
+
+        case "report-groups-query":                                // [дод 3]
+        {
+            IReadOnlyList<GroupSummary> viaQuery = ReportService.ByStatusQuery(items);
+            ReportPrinter.Print("За статусом (синтаксис запитів)", viaQuery);
+            Console.WriteLine();
+            Console.WriteLine($"Збігається з методним синтаксисом: {viaQuery.SequenceEqual(ReportService.ByStatus(items))}");
+            return 0;
+        }
+
+        case "demo-deferred":
+            DeferredDemo.Run(items);
+            return 0;
+
+        case "bench":                                              // [дод 4]
+            BenchDemo.Run(100_000);
+            return 0;
+
+        default:
+            Console.WriteLine("Невідома команда. Доступні:");
+            Console.WriteLine("  report-top | report-expensive | report-groups | report-sum | report-products");
+            Console.WriteLine("  report-customers | report-groups-query | demo-deferred | bench");
+            return 2;
+    }
+}
