@@ -17,7 +17,7 @@ public static class CustomerOrderPolicy
             o.CustomerId == customerId.Trim().ToUpperInvariant() && o.Status == OrderStatus.Draft);
 
         if (drafts >= MaxDraftOrders)
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"Клієнт {customerId} уже має {drafts} незавершених замовлень (ліміт {MaxDraftOrders})");
     }
 }

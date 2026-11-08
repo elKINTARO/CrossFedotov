@@ -6,5 +6,6 @@ public enum OrderChangeKind
     OrderCreated,
     LineAdded,
     OrderConfirmed,
-    OrderCancelled
+    OrderCancelled,
+    OrderImported
 }

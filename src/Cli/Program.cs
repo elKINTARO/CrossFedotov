@@ -8,6 +8,7 @@ using Cli.Notifications;
 using Core;
 using Core.Domain;
 using Core.Reports;
+using Core.Storage;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -88,9 +89,10 @@ if (args is ["--import", ..])
     return 0;
 }
 
-// ===== COMPOSITION ROOT (lab05-07) =====
+// ===== COMPOSITION ROOT (lab05-08) =====
 // Єдине місце, де створюються конкретні класи і зшиваються залежності.
-// Сховище: --file, --cache. Сценарій: --events, --sink (lab06), report-* (lab07), без аргументів — lab05.
+// Сховище: --file, --cache. Сценарій: --events, --sink (lab06), report-* (lab07),
+// import / import-stream / gen-import (lab08), без аргументів — lab05.
 string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "orders.json");
 string logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
 
@@ -98,6 +100,10 @@ IOrderStore store = StoreFactory.Create(args, dataPath);
 
 // lab07: перший аргумент без "--" — назва звіту. Прапорці (--file тощо) назвою не вважаються.
 string? command = args.FirstOrDefault(a => !a.StartsWith("--"));
+
+// lab08: асинхронний імпорт. await на верхньому рівні: Main стає async Task<int> автоматично.
+if (command is "import" or "import-stream" or "gen-import")
+    return await RunImportAsync(command, args, store);
 
 try
 {
@@ -184,6 +190,102 @@ static int RunReport(string command, OrderService service, bool empty)
             Console.WriteLine("Невідома команда. Доступні:");
             Console.WriteLine("  report-top | report-expensive | report-groups | report-sum | report-products");
             Console.WriteLine("  report-customers | report-groups-query | demo-deferred | bench");
+            Console.WriteLine("  import <файл.json> [--timeout мс] | import-stream <файл.json> | gen-import <файл.json> <кількість>");
             return 2;
     }
+}
+
+// lab08: імпорт замовлень з Ctrl+C, тайм-аутом і роздільною обробкою помилок.
+// Команда йде першою: import <файл> [--timeout мс] [--file], import-stream <файл>, gen-import <файл> <кількість>.
+static async Task<int> RunImportAsync(string command, string[] args, IOrderStore store)
+{
+    using var cts = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, e) =>
+    {
+        e.Cancel = true;   // не вбивати процес одразу: імпорт сам зупиниться на найближчій перевірці токена
+        cts.Cancel();
+    };
+
+    if (args is ["gen-import", var genPath, var countText, ..])
+    {
+        int count = int.TryParse(countText, out int parsed) ? parsed : 200_000;
+        await ImportFileGenerator.WriteAsync(genPath, count, cts.Token);
+        Console.WriteLine($"Згенеровано {count:N0} замовлень у {Path.GetFullPath(genPath)}");
+        return 0;
+    }
+
+    if (args is not [_, var path, ..] || path.StartsWith("--"))
+    {
+        Console.WriteLine("Використання:");
+        Console.WriteLine("  import <файл.json> [--timeout мс]");
+        Console.WriteLine("  import-stream <файл.json>");
+        Console.WriteLine("  gen-import <файл.json> <кількість>");
+        return 2;
+    }
+
+    var service = new OrderService(store);
+    int events = 0;
+    service.Changed += (_, _) => events++;           // подія тижня 6 рахує додані записи
+
+    var importer = new JsonOrderImporter();
+    var progress = new ConsoleProgress("обробка");    // [дод 3]
+    int? timeoutMs = ReadInt(args, "--timeout");      // [дод 2]
+    int before = service.All().Count;
+
+    Console.WriteLine($"Імпорт {Path.GetFullPath(path)}  (Ctrl+C — скасувати)");
+
+    try
+    {
+        int added = command switch
+        {
+            "import-stream" => await service.ImportStreamAsync(importer, path, progress, cts.Token),
+            _ when timeoutMs is int ms => await service.ImportWithTimeoutAsync(
+                importer, path, TimeSpan.FromMilliseconds(ms), progress, cts.Token),
+            _ => await service.ImportAsync(importer, path, progress, cts.Token)
+        };
+
+        progress.Finish();
+        Console.WriteLine($"Імпортовано записів: {added} (подій OrderImported: {events})");
+        return 0;
+    }
+    // Порядок важливий: скасування і тайм-аут — очікувані ситуації, вони йдуть першими.
+    catch (TimeoutException ex)
+    {
+        progress.Finish();
+        Console.WriteLine($"Імпорт перервано: {ex.Message}");
+        return 3;
+    }
+    catch (OperationCanceledException)
+    {
+        progress.Finish();
+        Console.WriteLine("Імпорт скасовано.");
+        return 3;
+    }
+    catch (DomainException ex)
+    {
+        progress.Finish();
+        Console.WriteLine($"Дані відхилено: {ex.Message}");
+        return 4;
+    }
+    catch (FileNotFoundException)
+    {
+        Console.WriteLine($"Файл не знайдено: {Path.GetFullPath(path)}");
+        return 1;
+    }
+    catch (System.Text.Json.JsonException ex)
+    {
+        progress.Finish();
+        Console.WriteLine($"Файл не є коректним JSON: {ex.Message}");
+        return 4;
+    }
+    finally
+    {
+        Console.WriteLine($"Замовлень у сховищі: було {before}, стало {service.All().Count}");
+    }
+}
+
+static int? ReadInt(string[] args, string option)
+{
+    int i = Array.IndexOf(args, option);
+    return i >= 0 && i + 1 < args.Length && int.TryParse(args[i + 1], out int value) ? value : null;
 }

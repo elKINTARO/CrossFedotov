@@ -79,7 +79,7 @@ internal static class StoreDemo
             action();
             Console.WriteLine($"  {title}: виняток НЕ спрацював!");
         }
-        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        catch (Exception ex) when (ex is DomainException or InvalidOperationException or ArgumentException)
         {
             Console.WriteLine($"  {title}: {ex.Message}");
         }

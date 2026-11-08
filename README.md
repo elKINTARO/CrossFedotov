@@ -35,6 +35,13 @@ dotnet run --project src/Cli -- report-groups-query              # lab07: син
 dotnet run --project src/Cli -- demo-deferred                    # lab07: відкладене виконання
 dotnet run --project src/Cli -- bench                            # lab07: Stopwatch, 100 000 записів
 dotnet run --project src/Cli -- report-sum --empty               # lab07: порожнє джерело
+dotnet test                                                      # lab08: unit-тести Core
+dotnet run --project src/Cli -- import data/orders-import.json   # lab08: async-імпорт замовлень
+dotnet run --project src/Cli -- import data/orders-broken.json   # lab08: DomainException з номером запису
+dotnet run --project src/Cli -- gen-import out/big-orders.json 500000
+dotnet run --project src/Cli -- import out/big-orders.json --timeout 300    # тайм-аут
+dotnet run --project src/Cli -- import out/big-orders.json                  # Ctrl+C під час імпорту
+dotnet run --project src/Cli -- import-stream out/big-orders.json           # потоковий, Ctrl+C
 ```
 
 Коди завершення: `0` успіх, `1` файл не знайдено, `2` непідтримуваний формат.
@@ -94,11 +101,14 @@ CrossApp.slnx
     │   ├── Events/        # OrderChangeKind, OrderChangedEventArgs
     │   ├── Abstractions/  # IOrderStore — контракт сховища
     │   ├── Services/      # OrderService
+    │   ├── DomainException.cs
     │   ├── Storage/       # InMemoryOrderStore, FileOrderStore, CachingOrderStore
     │   └── SampleData.cs
     │   └── Storage/   # сховища (тиждень 5)
     └── Cli/         # консольний застосунок, ProjectReference → Core
     ├── data/
+    tests/
+    └── Core.Tests/    # xUnit, посилання лише на Core
     ├── sample.csv
     ├── sample.json
     ├── mixed.csv
@@ -285,14 +295,60 @@ select new GroupSummary(g.Key.ToString(), g.Count(), total)
 і вона не обчислюється двічі. Для ланцюжків `Where` → `ThenBy` → `Take` методний
 синтаксис коротший і читається зліва направо, тому основні звіти записані ним.
 
-### Замір на 100 000 записів (додаткове 4)
+## Асинхронність, скасування, тести (lab08)
 
-| Варіант | Час, мс |
+### Що асинхронне
+
+Асинхронним став лише ввід-вивід: читання файлу імпорту (`JsonOrderImporter`,
+`FileStream` з `useAsync: true`) і запис згенерованого файлу. Доменні операції
+(`AddLine`, `Confirm`) і звіти лишились синхронними: вони працюють з пам'яттю
+і нічого не чекають, `async` дав би лише накладні витрати.
+
+### Скасування
+
+Токен створює Cli (`CancellationTokenSource`, Ctrl+C через `Console.CancelKeyPress`
+або `--timeout`) і передає далі: `ImportAsync` → `LoadAsync` → `DeserializeAsync`.
+Перевірка `ThrowIfCancellationRequested` — у кожній ітерації циклу.
+Тайм-аут реалізовано зв'язаними токенами (`CreateLinkedTokenSource`): якщо спрацював
+таймер, а не користувач, сервіс кидає `TimeoutException`.
+
+Як перевірити: `gen-import out/big-orders.json 500000`, потім
+`import out/big-orders.json` і Ctrl+C — «Імпорт скасовано.», сховище не змінилось.
+
+### Помилки
+
+| Тип | Коли | Приклад |
+|---|---|---|
+| `DomainException` | порушено бізнес-правило | замовлення вже підтверджено; рядок у підтверджене; ліміт чернеток; запис N у файлі некоректний |
+| `ArgumentException` | поганий аргумент | порожній id клієнта; кількість 0 |
+| `JsonException`, `IOException` | технічна помилка | битий JSON, файл не знайдено |
+| `OperationCanceledException` | очікуване скасування | Ctrl+C |
+
+Імпортер загортає `ArgumentException` у `DomainException` з номером запису і
+зберігає початковий виняток в `InnerException`.
+
+`import` атомарний: файл перевіряється повністю, і за одного поганого запису не
+додається нічого. `import-stream` (`IAsyncEnumerable`) не атомарний: записи до
+поганого вже додано.
+
+### Тести
+
+`dotnet test` — 31 тест (з урахуванням рядків `[Theory]`). Тести не використовують `data/`:
+сховище в пам'яті, власний `TestData`, тимчасові файли з видаленням у `finally`.
+
+| Тест | Що перевіряє |
 |---|---|
-| A. без ToList посередині | _впиши_ |
-| B. з ToList посередині | _впиши_ |
-| C. відкладений запит двічі | _впиши_ |
-| D. матеріалізовано один раз | _впиши_ |
+| `AddLine_WithZeroQuantity_...` | ArgumentException і незмінний стан |
+| `Confirm_Twice_ThrowsDomainException` | «вже підтверджено» |
+| `Total_AfterAddingLines_IsSumOfLines` | сума замовлення після рядків |
+| `CreateOrder_RaisesChangedExactlyOnce` | подія рівно одна |
+| `FailedAddLine_RaisesNoEvent` | невдала операція не дає події |
+| `ExpensiveOrders_CountsOnlyAboveThreshold` | `[Theory]` на 4 порогах |
+| `TopCustomers_IsDeterministic` | другий ключ топ-N |
+| `ImportAsync_WhenAlreadyCancelled_Throws` | скасування |
+| `ImportAsync_WithBrokenRecord_...` | DomainException з номером, нічого не додано |
+| `ImportWithTimeout_WhenImporterHangs_...` | спрацював саме тайм-аут |
 
-B повільніший за A через проміжний список. C повільніший за D приблизно вдвічі:
-відкладений запит проходить 100 000 записів двічі.
+Покриття: `dotnet test --collect:"XPlat Code Coverage"` — _впиши відсоток_.
+Не покриті файлове сховище, демо і CSV-імпортери: вони перевірені демо, а тести
+свідомо не чіпають диск.

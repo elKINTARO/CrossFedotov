@@ -78,6 +78,87 @@ public sealed class OrderService(
         return _store.List().Where(predicate).ToList();
     }
 
+        // ===== lab08: асинхронний імпорт =====
+
+    // Імпорт усього файлу. Імпортер приходить параметром (ручний DI), токен передається далі.
+    // Файл спершу перевіряється повністю: якщо хоч один запис поганий, у сховище не потрапить нічого.
+    public async Task<int> ImportAsync(
+        IOrderImporter importer,
+        string path,
+        IProgress<int>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(importer);
+        ct.ThrowIfCancellationRequested();
+
+        IReadOnlyList<Order> items = await importer.LoadAsync(path, ct);
+
+        int added = 0;
+        for (int i = 0; i < items.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (TryAddImported(items[i]))
+                added++;
+
+            progress?.Report((i + 1) * 100 / items.Count); // [дод 3]
+        }
+
+        return added;
+    }
+
+    // [дод 1] Потоковий імпорт: await foreach по IAsyncEnumerable.
+    // Не атомарний: записи до зіпсованого вже додані — це ціна потокової обробки.
+    public async Task<int> ImportStreamAsync(
+        IOrderImporter importer,
+        string path,
+        IProgress<int>? progress = null,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(importer);
+
+        int added = 0;
+        await foreach (Order order in importer.StreamAsync(path, progress, ct))
+        {
+            if (TryAddImported(order))
+                added++;
+        }
+
+        return added;
+    }
+
+    // [дод 2] Зв'язані токени: скасування користувача АБО тайм-аут.
+    // Якщо спрацював саме тайм-аут — кидаємо TimeoutException, щоб викликач розрізнив причини.
+    public async Task<int> ImportWithTimeoutAsync(
+        IOrderImporter importer,
+        string path,
+        TimeSpan timeout,
+        IProgress<int>? progress = null,
+        CancellationToken ct = default)
+    {
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+        try
+        {
+            return await ImportAsync(importer, path, progress, linked.Token);
+        }
+        catch (OperationCanceledException ex) when (timeoutCts.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            throw new TimeoutException($"Імпорт не завершився за {timeout.TotalSeconds:F1} с.", ex);
+        }
+    }
+
+    // Ідемпотентність: повторний імпорт того самого файлу нічого не дублює.
+    private bool TryAddImported(Order order)
+    {
+        if (_store.GetById(order.Id) is not null)
+            return false;
+
+        _store.Add(order);
+        OnChanged(order, OrderChangeKind.OrderImported, order.Total);
+        return true;
+    }
+
     private Order Require(string id) =>
-        _store.GetById(id) ?? throw new InvalidOperationException($"Немає замовлення з id={id}.");
+        _store.GetById(id) ?? throw new DomainException($"Немає замовлення з id={id}.");
 }
