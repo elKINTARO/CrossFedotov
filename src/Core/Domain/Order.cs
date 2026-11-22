@@ -96,7 +96,7 @@ public sealed class Order
         // Рядки додаються у чернетці й проходять ті самі інваріанти, що й уперше,
         // і лише потім відновлюється статус.
         foreach (OrderLineDto line in dto.Lines)
-            order.AddLine(line.ProductId, line.Name, line.Price, line.Quantity);
+            order.AddLine(line.ProductId, line.ProductName, line.Price, line.Quantity);
 
         switch (status)
         {

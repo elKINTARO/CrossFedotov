@@ -10,7 +10,7 @@ public class ImportTests
     private const string ValidJson = """
         [
           { "id": "IMP-1", "customerId": "C-1", "createdAt": "2026-01-15T12:00:00+00:00", "status": "Confirmed",
-            "lines": [ { "productId": "P-1", "name": "Кабель", "price": 100, "quantity": 3 } ] },
+            "lines": [ { "productId": "P-1", "productName": "Кабель", "price": 100, "quantity": 3 } ] },
           { "id": "IMP-2", "customerId": "C-2", "createdAt": "2026-01-15T12:00:00+00:00", "status": "Draft",
             "lines": [] }
         ]
@@ -20,9 +20,9 @@ public class ImportTests
     private const string BrokenJson = """
         [
           { "id": "BAD-1", "customerId": "C-1", "createdAt": "2026-01-15T12:00:00+00:00", "status": "Draft",
-            "lines": [ { "productId": "P-1", "name": "Кабель", "price": 100, "quantity": 1 } ] },
+            "lines": [ { "productId": "P-1", "productName": "Кабель", "price": 100, "quantity": 1 } ] },
           { "id": "BAD-2", "customerId": "C-2", "createdAt": "2026-01-15T12:00:00+00:00", "status": "Draft",
-            "lines": [ { "productId": "P-2", "name": "Миша", "price": 250, "quantity": 0 } ] }
+            "lines": [ { "productId": "P-2", "productName": "Миша", "price": 250, "quantity": 0 } ] }
         ]
         """;
 

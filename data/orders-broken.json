@@ -1,8 +1,8 @@
 [
   { "id": "BRK-001", "customerId": "C-001", "createdAt": "2026-11-05T10:00:00+02:00", "status": "Confirmed",
-    "lines": [ { "productId": "P-002", "name": "Миша бездротова", "price": 649.50, "quantity": 1 } ] },
+    "lines": [ { "productId": "P-002", "productName": "Миша бездротова", "price": 649.50, "quantity": 1 } ] },
   { "id": "BRK-002", "customerId": "C-002", "createdAt": "2026-11-05T11:00:00+02:00", "status": "Draft",
-    "lines": [ { "productId": "P-008", "name": "Килимок для миші XL", "price": 299.00, "quantity": 2 } ] },
+    "lines": [ { "productId": "P-008", "productName": "Килимок для миші XL", "price": 299.00, "quantity": 2 } ] },
   { "id": "BRK-003", "customerId": "C-003", "createdAt": "2026-11-05T12:00:00+02:00", "status": "Confirmed",
-    "lines": [ { "productId": "P-001", "name": "Ноутбук 15.6\"", "price": 32999.00, "quantity": 0 } ] }
+    "lines": [ { "productId": "P-001", "productName": "Ноутбук 15.6\"", "price": 32999.00, "quantity": 0 } ] }
 ]

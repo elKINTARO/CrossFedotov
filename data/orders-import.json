@@ -1,14 +1,14 @@
 [
   { "id": "IMP-001", "customerId": "C-001", "createdAt": "2026-11-02T10:00:00+02:00", "status": "Confirmed",
-    "lines": [ { "productId": "P-002", "name": "Миша бездротова", "price": 649.50, "quantity": 2 } ] },
+    "lines": [ { "productId": "P-002", "productName": "Миша бездротова", "price": 649.50, "quantity": 2 } ] },
   { "id": "IMP-002", "customerId": "C-002", "createdAt": "2026-11-02T11:30:00+02:00", "status": "Confirmed",
-    "lines": [ { "productId": "P-004", "name": "Монітор 27\" IPS", "price": 8999.99, "quantity": 1 },
-               { "productId": "P-010", "name": "Кабель HDMI 2м", "price": 189.50, "quantity": 2 } ] },
+    "lines": [ { "productId": "P-004", "productName": "Монітор 27\" IPS", "price": 8999.99, "quantity": 1 },
+               { "productId": "P-010", "productName": "Кабель HDMI 2м", "price": 189.50, "quantity": 2 } ] },
   { "id": "IMP-003", "customerId": "C-007", "createdAt": "2026-11-03T09:15:00+02:00", "status": "Draft",
-    "lines": [ { "productId": "P-003", "name": "Клавіатура механічна", "price": 2450.00, "quantity": 1 } ] },
+    "lines": [ { "productId": "P-003", "productName": "Клавіатура механічна", "price": 2450.00, "quantity": 1 } ] },
   { "id": "IMP-004", "customerId": "C-003", "createdAt": "2026-11-03T14:00:00+02:00", "status": "Cancelled",
-    "lines": [ { "productId": "P-006", "name": "USB-хаб 4 порти", "price": 399.90, "quantity": 3 } ] },
+    "lines": [ { "productId": "P-006", "productName": "USB-хаб 4 порти", "price": 399.90, "quantity": 3 } ] },
   { "id": "IMP-005", "customerId": "C-005", "createdAt": "2026-11-04T16:45:00+02:00", "status": "Confirmed",
-    "lines": [ { "productId": "P-001", "name": "Ноутбук 15.6\"", "price": 32999.00, "quantity": 1 },
-               { "productId": "P-005", "name": "Навушники бездротові", "price": 1899.00, "quantity": 1 } ] }
+    "lines": [ { "productId": "P-001", "productName": "Ноутбук 15.6\"", "price": 32999.00, "quantity": 1 },
+               { "productId": "P-005", "productName": "Навушники бездротові", "price": 1899.00, "quantity": 1 } ] }
 ]

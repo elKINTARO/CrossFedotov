@@ -1,6 +1,4 @@
-using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Text.Unicode;
 using Core.Abstractions;
 using Core.Domain;
 using Core.Dto;
@@ -10,14 +8,9 @@ namespace Core.Storage;
 // Той самий контракт, інша механіка: кеш у пам'яті, дозавантаження при першому
 // зверненні, запис на диск після кожної зміни. На диск ідуть DTO, а не сутності:
 // формат файлу не диктує форму домену.
+// lab09: шлях приходить ззовні (з конфігурації), запис атомарний, JSON у camelCase.
 public sealed class FileOrderStore(string path) : IOrderStore
 {
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All)
-    };
-
     private readonly Dictionary<string, Order> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _path = Path.GetFullPath(path);
     private bool _loaded;
@@ -73,17 +66,29 @@ public sealed class FileOrderStore(string path) : IOrderStore
         if (_loaded)
             return;
 
-        if (File.Exists(_path))
+        if (!File.Exists(_path))
         {
-            List<OrderDto> dtos = JsonSerializer.Deserialize<List<OrderDto>>(File.ReadAllText(_path), Options) ?? [];
+            _loaded = true; // файлу ще немає — це не помилка, просто порожнє сховище
+            return;
+        }
 
-            // FromDto проганяє дані через ті самі інваріанти, що й Create:
-            // пошкоджений файл дасть виняток, а не некоректний агрегат.
+        try
+        {
+            List<OrderDto> dtos = JsonSerializer.Deserialize<List<OrderDto>>(File.ReadAllText(_path), OrderJson.Options) ?? [];
+
+            _cache.Clear();
             foreach (OrderDto dto in dtos)
             {
+                // FromDto проганяє дані через ті самі інваріанти, що й Create.
                 Order order = Order.FromDto(dto);
                 _cache[order.Id] = order;
             }
+        }
+        catch (Exception ex) when (ex is JsonException or ArgumentException or DomainException or NullReferenceException)
+        {
+            // Зрозуміле повідомлення з шляхом замість необробленого stack trace.
+            _cache.Clear();
+            throw new StorageException($"Файл даних {_path} пошкоджено або має старий формат: {ex.Message}", ex);
         }
 
         _loaded = true;
@@ -91,8 +96,7 @@ public sealed class FileOrderStore(string path) : IOrderStore
 
     private void Flush()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         List<OrderDto> dtos = _cache.Values.Select(o => o.ToDto()).ToList();
-        File.WriteAllText(_path, JsonSerializer.Serialize(dtos, Options));
+        OrderJson.WriteAtomic(_path, dtos);
     }
 }

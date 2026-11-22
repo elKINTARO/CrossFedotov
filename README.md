@@ -42,6 +42,9 @@ dotnet run --project src/Cli -- gen-import out/big-orders.json 500000
 dotnet run --project src/Cli -- import out/big-orders.json --timeout 300    # тайм-аут
 dotnet run --project src/Cli -- import out/big-orders.json                  # Ctrl+C під час імпорту
 dotnet run --project src/Cli -- import-stream out/big-orders.json           # потоковий, Ctrl+C
+dotnet run --project src/Cli -- config                           # lab09: профіль, файл даних, ApiKey
+dotnet run --project src/Cli -- export                           # lab09: експорт колекції у файл даних
+dotnet run --project src/Cli -- export out/all.json              # lab09: експорт в інший файл
 ```
 
 Коди завершення: `0` успіх, `1` файл не знайдено, `2` непідтримуваний формат.
@@ -349,6 +352,71 @@ select new GroupSummary(g.Key.ToString(), g.Count(), total)
 | `ImportAsync_WithBrokenRecord_...` | DomainException з номером, нічого не додано |
 | `ImportWithTimeout_WhenImporterHangs_...` | спрацював саме тайм-аут |
 
-Покриття: `dotnet test --collect:"XPlat Code Coverage"` — _впиши відсоток_.
+Покриття: `dotnet test --collect:"XPlat Code Coverage"`.
 Не покриті файлове сховище, демо і CSV-імпортери: вони перевірені демо, а тести
 свідомо не чіпають диск.
+
+## Конфігурація (lab09)
+
+Налаштування: `src/Cli/appsettings.json` (база = Production) і
+`src/Cli/appsettings.Development.json`. Профіль обирає `CROSSAPP_ENVIRONMENT`
+(за замовчуванням Development). Файли копіюються в каталог збірки і читаються
+від `AppContext.BaseDirectory`, тому запуск з будь-якого каталогу дає той самий результат.
+
+Порядок джерел (пізніше перекриває раніше):
+`appsettings.json` → `appsettings.{Environment}.json` → user-secrets (лише Development)
+→ змінні `CROSSAPP_*` → `--Ключ=значення` у командному рядку.
+Проста змінна `CROSSAPP_DATA_PATH` перекриває шлях з будь-якого з них.
+
+| Ключ | Типово | Development | Змінна середовища |
+|---|---|---|---|
+| `EnvironmentName` | Production | Development | — (профіль: `CROSSAPP_ENVIRONMENT`) |
+| `Logging:MinimumLevel` | Warning | Debug | `CROSSAPP_Logging__MinimumLevel` |
+| `Storage:Root` | LocalAppData | AppBase | `CROSSAPP_Storage__Root` |
+| `Storage:DataPath` | data | data | `CROSSAPP_Storage__DataPath` або `CROSSAPP_DATA_PATH` |
+| `Storage:FileName` | orders.json | orders.json | `CROSSAPP_Storage__FileName` |
+| `Orders:Currency` | UAH | UAH | `CROSSAPP_Orders__Currency` |
+| `Integration:ApiKey` | — | user-secrets | `CROSSAPP_Integration__ApiKey` |
+
+| Профіль | Лог | Дані |
+|---|---|---|
+| Development | Debug | `<каталог збірки>/data/orders.json` |
+| Production | Warning | `<LocalApplicationData>/CrossApp/data/orders.json` |
+
+### Приклади змінних
+
+bash / zsh (лише для однієї команди):
+```
+CROSSAPP_DATA_PATH=/tmp/crossapp-data dotnet run --project src/Cli -- export
+CROSSAPP_ENVIRONMENT=Production dotnet run --project src/Cli -- config
+CROSSAPP_Integration__ApiKey=from-env dotnet run --project src/Cli -- config
+```
+
+PowerShell (до кінця сесії терміналу):
+```
+$env:CROSSAPP_DATA_PATH = "C:\Users\st\data"
+$env:CROSSAPP_ENVIRONMENT = "Production"
+$env:CROSSAPP_Integration__ApiKey = "from-env"
+dotnet run --project src/Cli -- config
+Remove-Item Env:CROSSAPP_DATA_PATH
+```
+
+У назві змінної подвійне підкреслення замінює двокрапку: `Storage:DataPath` → `CROSSAPP_Storage__DataPath`.
+
+### Секрет
+
+`Integration:ApiKey` не зберігається в репозиторії. У `Cli.csproj` є лише `UserSecretsId`.
+Значення задається так:
+```
+dotnet user-secrets set "Integration:ApiKey" "local-dev-key" --project src/Cli
+```
+і лежить у `~/.microsoft/usersecrets/<UserSecretsId>/secrets.json`
+(Windows: `%APPDATA%\Microsoft\UserSecrets\<UserSecretsId>\secrets.json`).
+Програма друкує лише «присутній, довжина N».
+
+### JSON
+
+Файл даних і експорт: масив замовлень з вкладеним масивом `lines`
+(`productId`, `productName`, `price`, `quantity`), ключі в camelCase,
+кирилиця без `\uXXXX`. Запис атомарний: `orders.json.tmp` → `File.Move`.
+Експортований файл імпортується назад командою `import`.

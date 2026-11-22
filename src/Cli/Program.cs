@@ -89,11 +89,14 @@ if (args is ["--import", ..])
     return 0;
 }
 
-// ===== COMPOSITION ROOT (lab05-08) =====
+// ===== COMPOSITION ROOT (lab05-09) =====
 // Єдине місце, де створюються конкретні класи і зшиваються залежності.
 // Сховище: --file, --cache. Сценарій: --events, --sink (lab06), report-* (lab07),
-// import / import-stream / gen-import (lab08), без аргументів — lab05.
-string dataPath = Path.Combine(AppContext.BaseDirectory, "data", "orders.json");
+// import / import-stream / gen-import (lab08), config / export (lab09), без аргументів — lab05.
+
+// lab09: шлях до даних і секрет беруться з конфігурації, а не з коду.
+LoadedConfig cfg = AppConfiguration.Load(args);
+string dataPath = cfg.DataFile;
 string logPath = Path.Combine(AppContext.BaseDirectory, "logs", "app.log");
 
 IOrderStore store = StoreFactory.Create(args, dataPath);
@@ -101,12 +104,22 @@ IOrderStore store = StoreFactory.Create(args, dataPath);
 // lab07: перший аргумент без "--" — назва звіту. Прапорці (--file тощо) назвою не вважаються.
 string? command = args.FirstOrDefault(a => !a.StartsWith("--"));
 
-// lab08: асинхронний імпорт. await на верхньому рівні: Main стає async Task<int> автоматично.
-if (command is "import" or "import-stream" or "gen-import")
-    return await RunImportAsync(command, args, store);
-
 try
 {
+    // lab09: конфігурація і експорт колекції в JSON.
+    if (command is "config")
+    {
+        ConfigView.PrintDetails(cfg);
+        return 0;
+    }
+
+    if (command is "export")
+        return RunExport(args, new OrderService(store), cfg);
+
+    // lab08: асинхронний імпорт. await на верхньому рівні: Main стає async Task<int> автоматично.
+    if (command is "import" or "import-stream" or "gen-import")
+        return await RunImportAsync(command, args, store);
+
     if (command is not null)
         return RunReport(command, new OrderService(store), empty: args.Contains("--empty"));
 
@@ -124,14 +137,35 @@ try
         StoreDemo.Run(new OrderService(store), store);
     }
 }
-catch (System.Text.Json.JsonException ex)
+catch (StorageException ex)
 {
-    Console.WriteLine($"Файл даних пошкоджено або має старий формат: {ex.Message}");
-    Console.WriteLine($"Видаліть {dataPath} і запустіть знову.");
+    // lab09: зіпсований файл даних — зрозуміле повідомлення замість stack trace.
+    Console.WriteLine(ex.Message);
+    Console.WriteLine($"Виправте або видаліть {dataPath} і запустіть знову.");
     return 1;
 }
 
 return 0;
+
+// lab09: експорт усієї колекції в JSON. Без шляху — у файл даних з конфігурації.
+static int RunExport(string[] args, OrderService service, LoadedConfig cfg)
+{
+    string path = args is [_, var target, ..] && !target.StartsWith("--")
+        ? Path.GetFullPath(target)
+        : cfg.DataFile;
+
+    IReadOnlyList<Order> orders = service.All();
+    int count = JsonOrderExporter.Export(orders, path);
+
+    ConfigView.PrintSummary(cfg);
+    Console.WriteLine($"Експортовано записів: {count}  →  {path}");
+    Console.WriteLine($"Виручка підтверджених: {ReportService.Totals(orders).Revenue:N2} {cfg.Options.Orders.Currency}");
+    Console.WriteLine("Початок файлу:");
+    foreach (string line in File.ReadLines(path).Take(14))
+        Console.WriteLine($"  {line}");
+
+    return 0;
+}
 
 // lab07: підкоманди звітів. Тут лише виклики ReportService і вивід — жодного відбору даних.
 static int RunReport(string command, OrderService service, bool empty)
@@ -191,6 +225,7 @@ static int RunReport(string command, OrderService service, bool empty)
             Console.WriteLine("  report-top | report-expensive | report-groups | report-sum | report-products");
             Console.WriteLine("  report-customers | report-groups-query | demo-deferred | bench");
             Console.WriteLine("  import <файл.json> [--timeout мс] | import-stream <файл.json> | gen-import <файл.json> <кількість>");
+            Console.WriteLine("  config | export [файл.json]");
             return 2;
     }
 }

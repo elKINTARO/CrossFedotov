@@ -1,6 +1,7 @@
 namespace Core.Dto;
 
-public sealed record OrderLineDto(string ProductId, string Name, decimal Price, int Quantity);
+// Варіант «Замовлення»: рядок містить productName, quantity, price.
+public sealed record OrderLineDto(string ProductId, string ProductName, decimal Price, int Quantity);
 
 public sealed record OrderDto(
     string Id,

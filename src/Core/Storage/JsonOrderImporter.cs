@@ -10,7 +10,8 @@ namespace Core.Storage;
 // Справжній асинхронний ввід-вивід: FileStream з useAsync: true, без Task.Run.
 public sealed class JsonOrderImporter : IOrderImporter
 {
-    private static readonly JsonSerializerOptions Options = new() { PropertyNameCaseInsensitive = true };
+    // lab09: ті самі налаштування, що й у FileOrderStore та експорті.
+    private static JsonSerializerOptions Options => OrderJson.Options;
 
     public async Task<IReadOnlyList<Order>> LoadAsync(string path, CancellationToken ct = default)
     {
